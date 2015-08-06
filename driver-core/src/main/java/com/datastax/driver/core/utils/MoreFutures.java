@@ -15,9 +15,13 @@
  */
 package com.datastax.driver.core.utils;
 
+import java.util.concurrent.ExecutionException;
+
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+
+import com.datastax.driver.core.exceptions.DriverException;
 
 /**
  * Helpers to work with Guava's {@link ListenableFuture}.
