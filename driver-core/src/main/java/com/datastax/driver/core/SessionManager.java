@@ -119,8 +119,26 @@ class SessionManager extends AbstractSession {
         return poolsState.keyspace;
     }
 
-    public ResultSetFuture executeAsync(Statement statement) {
-        return executeQuery(makeRequestMessage(statement, null), statement);
+    public ResultSetFuture executeAsync(final Statement statement) {
+        if (isInit) {
+            DefaultResultSetFuture future = new DefaultResultSetFuture(this, makeRequestMessage(statement, null));
+            new RequestHandler(this, future, statement).sendRequest();
+            return future;
+        } else {
+            // If the session is not initialized, we can't call makeRequestMessage() synchronously, because it
+            // requires internal Cluster state that might not be initialized yet (like the protocol version).
+            // Because of the way the future is built, we need another 'proxy' future that we can return now.
+            final ChainedResultSetFuture chainedFuture = new ChainedResultSetFuture();
+            this.initAsync().addListener(new Runnable() {
+                @Override
+                public void run() {
+                    DefaultResultSetFuture actualFuture = new DefaultResultSetFuture(SessionManager.this, makeRequestMessage(statement, null));
+                    execute(actualFuture, statement);
+                    chainedFuture.setSource(actualFuture);
+                }
+            }, executor());
+            return chainedFuture;
+        }
     }
 
     public ListenableFuture<PreparedStatement> prepareAsync(String query) {
@@ -548,11 +566,16 @@ class SessionManager extends AbstractSession {
      * This method will find a suitable node to connect to using the
      * {@link LoadBalancingPolicy} and handle host failover.
      */
-    void execute(RequestHandler.Callback callback, Statement statement) {
-        // init() locks, so avoid if we know we don't need it.
-        if (!isInit)
-            init();
-        new RequestHandler(this, callback, statement).sendRequest();
+    void execute(final RequestHandler.Callback callback, final Statement statement) {
+        if (isInit)
+            new RequestHandler(this, callback, statement).sendRequest();
+        else
+            this.initAsync().addListener(new Runnable() {
+                @Override
+                public void run() {
+                    new RequestHandler(SessionManager.this, callback, statement).sendRequest();
+                }
+            }, executor());
     }
 
     private void prepare(String query, InetSocketAddress toExclude) throws InterruptedException {
@@ -587,7 +610,6 @@ class SessionManager extends AbstractSession {
     }
 
     ResultSetFuture executeQuery(Message.Request msg, Statement statement) {
-
         DefaultResultSetFuture future = new DefaultResultSetFuture(this, msg);
         execute(future, statement);
         return future;
