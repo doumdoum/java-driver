@@ -28,7 +28,6 @@ import com.google.common.util.concurrent.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.datastax.driver.core.exceptions.DriverException;
 import com.datastax.driver.core.exceptions.DriverInternalError;
 import com.datastax.driver.core.exceptions.InvalidQueryException;
 import com.datastax.driver.core.exceptions.UnsupportedFeatureException;
@@ -100,6 +99,7 @@ class SessionManager extends AbstractSession {
 
             @Override
             public void onFailure(Throwable t) {
+                SessionManager.this.closeAsync(); // don't leak the session
                 myInitFuture.setException(t);
             }
         });

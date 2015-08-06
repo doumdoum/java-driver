@@ -26,7 +26,7 @@ import com.google.common.util.concurrent.*;
  *
  * This is primarly intended to make mocking easier.
  */
-public abstract class AbstractSession implements Session {
+public abstract class AbstractSession implements Session, AsyncInitSession {
 
     /**
      * {@inheritDoc}

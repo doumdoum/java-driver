@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Functions;
 import com.google.common.base.Objects;
 import com.google.common.base.Predicates;
 import com.google.common.collect.*;
@@ -38,6 +39,7 @@ import com.datastax.driver.core.exceptions.DriverInternalError;
 import com.datastax.driver.core.exceptions.NoHostAvailableException;
 import com.datastax.driver.core.policies.*;
 import com.datastax.driver.core.utils.MoreFutures;
+import com.datastax.driver.core.utils.MoreFutures.FailureCallback;
 
 /**
  * Information and known state of a Cassandra cluster.
@@ -244,11 +246,39 @@ public class Cluster implements Closeable {
      * Cluster.
      */
     public Session connect() {
+        try {
+            return Uninterruptibles.getUninterruptibly(connectAsync());
+        } catch (ExecutionException e) {
+            throw Exceptions.toUnchecked(e);
+        }
+    }
+
+    /**
+     * Creates a new session on this cluster and initializes it asynchronously.
+     *
+     * This will also initialize the {@code Cluster} if needed; note that cluster
+     * initialization happens synchronously on the thread that called this method.
+     * Therefore it is recommended to initialize the cluster at application
+     * startup, and not rely on this method to do it.
+     *
+     * @return a future that will complete when the session is fully initialized.
+     *
+     * @throws NoHostAvailableException if the Cluster has not been initialized
+     * yet ({@link #init} has not be called and this is the first connect call)
+     * and no host amongst the contact points can be reached.
+     *
+     * @throws IllegalStateException if the Cluster was closed prior to calling
+     * this method. This can occur either directly (through {@link #close()} or
+     * {@link #closeAsync()}), or as a result of an error while initializing the
+     * Cluster.
+     *
+     * @see #connect()
+     */
+    public ListenableFuture<Session> connectAsync() {
         checkNotClosed(manager);
         init();
-        Session session = manager.newSession();
-        session.init();
-        return session;
+        AsyncInitSession session = manager.newSession();
+        return session.initAsync();
     }
 
     /**
@@ -277,23 +307,53 @@ public class Cluster implements Closeable {
      * Cluster.
      */
     public Session connect(String keyspace) {
-        long timeout = getConfiguration().getSocketOptions().getConnectTimeoutMillis();
-        Session session = connect();
         try {
-            try {
-                ResultSetFuture future = session.executeAsync("USE " + keyspace);
-                // Note: using the connection timeout isn't perfectly correct, we should probably change that someday
-                Uninterruptibles.getUninterruptibly(future, timeout, TimeUnit.MILLISECONDS);
-                return session;
-            } catch (TimeoutException e) {
-                throw new DriverInternalError(String.format("No responses after %d milliseconds while setting current keyspace. This should not happen, unless you have setup a very low connection timeout.", timeout));
-            } catch (ExecutionException e) {
-                throw DefaultResultSetFuture.extractCauseFromExecutionException(e);
-            }
-        } catch (RuntimeException e) {
-            session.close();
-            throw e;
+            return Uninterruptibles.getUninterruptibly(connectAsync(keyspace));
+        } catch (ExecutionException e) {
+            throw Exceptions.toUnchecked(e);
         }
+    }
+
+    /**
+     * Creates a new session on this cluster, and initializes it to the given
+     * keyspace asynchronously.
+     *
+     * This will also initialize the {@code Cluster} if needed; note that cluster
+     * initialization happens synchronously on the thread that called this method.
+     * Therefore it is recommended to initialize the cluster at application
+     * startup, and not rely on this method to do it.
+     *
+     * @param keyspace The name of the keyspace to use for the created
+     * {@code Session}.
+     * @return a future that will complete when the session is fully initialized.
+     *
+     * @throws NoHostAvailableException if the Cluster has not been initialized
+     * yet ({@link #init} has not be called and this is the first connect call)
+     * and no host amongst the contact points can be reached.
+     *
+     * @throws IllegalStateException if the Cluster was closed prior to calling
+     * this method. This can occur either directly (through {@link #close()} or
+     * {@link #closeAsync()}), or as a result of an error while initializing the
+     * Cluster.
+     */
+    public ListenableFuture<Session> connectAsync(final String keyspace) {
+        ListenableFuture<Session> sessionFuture = connectAsync();
+        return Futures.transform(sessionFuture, new AsyncFunction<Session, Session>() {
+            @Override
+            public ListenableFuture<Session> apply(final Session session) throws Exception {
+                ResultSetFuture useFuture = session.executeAsync("USE " + keyspace);
+
+                // Don't leak the session if the USE query fails
+                Futures.addCallback(useFuture, new FailureCallback<ResultSet>() {
+                    @Override
+                    public void onFailure(Throwable t) {
+                        session.closeAsync();
+                    }
+                });
+
+                return Futures.transform(useFuture, Functions.constant(session));
+            }
+        });
     }
 
     /**
@@ -1444,7 +1504,7 @@ public class Cluster implements Closeable {
             return translated == null ? sa : translated;
         }
 
-        private Session newSession() {
+        private AsyncInitSession newSession() {
             SessionManager session = new SessionManager(Cluster.this);
             sessions.add(session);
             return session;
