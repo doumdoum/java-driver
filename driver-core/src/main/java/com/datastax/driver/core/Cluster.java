@@ -26,7 +26,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Functions;
 import com.google.common.base.Objects;
 import com.google.common.base.Predicates;
 import com.google.common.collect.*;
@@ -38,8 +37,6 @@ import com.datastax.driver.core.exceptions.AuthenticationException;
 import com.datastax.driver.core.exceptions.DriverInternalError;
 import com.datastax.driver.core.exceptions.NoHostAvailableException;
 import com.datastax.driver.core.policies.*;
-import com.datastax.driver.core.utils.MoreFutures;
-import com.datastax.driver.core.utils.MoreFutures.FailureCallback;
 
 /**
  * Information and known state of a Cassandra cluster.
@@ -222,7 +219,7 @@ public class Cluster implements Closeable {
      */
     public Session newSession() {
         checkNotClosed(manager);
-        return manager.newSession();
+        return manager.newSession(null);
     }
 
     /**
@@ -251,34 +248,6 @@ public class Cluster implements Closeable {
         } catch (ExecutionException e) {
             throw Exceptions.toUnchecked(e);
         }
-    }
-
-    /**
-     * Creates a new session on this cluster and initializes it asynchronously.
-     *
-     * This will also initialize the {@code Cluster} if needed; note that cluster
-     * initialization happens synchronously on the thread that called this method.
-     * Therefore it is recommended to initialize the cluster at application
-     * startup, and not rely on this method to do it.
-     *
-     * @return a future that will complete when the session is fully initialized.
-     *
-     * @throws NoHostAvailableException if the Cluster has not been initialized
-     * yet ({@link #init} has not be called and this is the first connect call)
-     * and no host amongst the contact points can be reached.
-     *
-     * @throws IllegalStateException if the Cluster was closed prior to calling
-     * this method. This can occur either directly (through {@link #close()} or
-     * {@link #closeAsync()}), or as a result of an error while initializing the
-     * Cluster.
-     *
-     * @see #connect()
-     */
-    public ListenableFuture<Session> connectAsync() {
-        checkNotClosed(manager);
-        init();
-        AsyncInitSession session = manager.newSession();
-        return session.initAsync();
     }
 
     /**
@@ -315,6 +284,31 @@ public class Cluster implements Closeable {
     }
 
     /**
+     * Creates a new session on this cluster and initializes it asynchronously.
+     *
+     * This will also initialize the {@code Cluster} if needed; note that cluster
+     * initialization happens synchronously on the thread that called this method.
+     * Therefore it is recommended to initialize the cluster at application
+     * startup, and not rely on this method to do it.
+     *
+     * @return a future that will complete when the session is fully initialized.
+     *
+     * @throws NoHostAvailableException if the Cluster has not been initialized
+     * yet ({@link #init} has not be called and this is the first connect call)
+     * and no host amongst the contact points can be reached.
+     *
+     * @throws IllegalStateException if the Cluster was closed prior to calling
+     * this method. This can occur either directly (through {@link #close()} or
+     * {@link #closeAsync()}), or as a result of an error while initializing the
+     * Cluster.
+     *
+     * @see #connect()
+     */
+    public ListenableFuture<Session> connectAsync() {
+        return connectAsync(null);
+    }
+
+    /**
      * Creates a new session on this cluster, and initializes it to the given
      * keyspace asynchronously.
      *
@@ -336,24 +330,11 @@ public class Cluster implements Closeable {
      * {@link #closeAsync()}), or as a result of an error while initializing the
      * Cluster.
      */
-    public ListenableFuture<Session> connectAsync(final String keyspace) {
-        ListenableFuture<Session> sessionFuture = connectAsync();
-        return Futures.transform(sessionFuture, new AsyncFunction<Session, Session>() {
-            @Override
-            public ListenableFuture<Session> apply(final Session session) throws Exception {
-                ResultSetFuture useFuture = session.executeAsync("USE " + keyspace);
-
-                // Don't leak the session if the USE query fails
-                Futures.addCallback(useFuture, new FailureCallback<ResultSet>() {
-                    @Override
-                    public void onFailure(Throwable t) {
-                        session.closeAsync();
-                    }
-                });
-
-                return Futures.transform(useFuture, Functions.constant(session));
-            }
-        });
+    public ListenableFuture<Session> connectAsync(String keyspace) {
+        checkNotClosed(manager);
+        init();
+        AsyncInitSession session = manager.newSession(keyspace);
+        return session.initAsync();
     }
 
     /**
@@ -1504,8 +1485,8 @@ public class Cluster implements Closeable {
             return translated == null ? sa : translated;
         }
 
-        private AsyncInitSession newSession() {
-            SessionManager session = new SessionManager(Cluster.this);
+        private AsyncInitSession newSession(String keyspace) {
+            SessionManager session = new SessionManager(Cluster.this, keyspace);
             sessions.add(session);
             return session;
         }
@@ -1942,7 +1923,7 @@ public class Cluster implements Closeable {
 
                     List<ListenableFuture<Boolean>> futures = Lists.newArrayListWithCapacity(sessions.size());
                     for (SessionManager s : sessions)
-                        futures.add(s.maybeAddPool(host, reusedConnection));
+                        futures.add(s.maybeAddPool(host, reusedConnection, false));
 
                     try {
                         // Only mark the node up once all session have added their pool (if the load-balancing

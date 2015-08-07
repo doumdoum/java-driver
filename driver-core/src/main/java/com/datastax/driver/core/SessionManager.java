@@ -53,10 +53,10 @@ class SessionManager extends AbstractSession {
     private volatile boolean isClosing;
 
     // Package protected, only Cluster should construct that.
-    SessionManager(Cluster cluster) {
+    SessionManager(Cluster cluster, String keyspace) {
         this.cluster = cluster;
         this.pools = new ConcurrentHashMap<Host, HostConnectionPool>();
-        this.poolsState = new HostConnectionPool.PoolState();
+        this.poolsState = new HostConnectionPool.PoolState(keyspace);
     }
 
     public Session init() {
@@ -110,9 +110,8 @@ class SessionManager extends AbstractSession {
         List<ListenableFuture<Boolean>> futures = Lists.newArrayListWithCapacity(hosts.size());
         for (Host host : hosts)
             if (host.state != Host.State.DOWN)
-                futures.add(maybeAddPool(host, null));
-        // Note: if a pool fails, maybeAddPool will take care of it
-        return Futures.successfulAsList(futures);
+                futures.add(maybeAddPool(host, null, true));
+        return Futures.allAsList(futures);
     }
 
     public String getLoggedKeyspace() {
@@ -329,7 +328,7 @@ class SessionManager extends AbstractSession {
     }
 
     // Returns whether there was problem creating the pool
-    ListenableFuture<Boolean> maybeAddPool(final Host host, Connection reusedConnection) {
+    ListenableFuture<Boolean> maybeAddPool(final Host host, Connection reusedConnection, final boolean failOnKeyspaceError) {
         final HostDistance distance = cluster.manager.loadBalancingPolicy().distance(host);
         if (distance == HostDistance.IGNORED)
             return Futures.immediateFuture(true);
@@ -362,6 +361,9 @@ class SessionManager extends AbstractSession {
                             ClusterNameMismatchException e = (ClusterNameMismatchException)t;
                             cluster.manager.logClusterNameMismatch(host, e.expectedClusterName, e.actualClusterName);
                             cluster.manager.triggerOnDown(host, false);
+                        } else if ((t instanceof SetKeyspaceException) && failOnKeyspaceError) {
+                            future.setException(t.getCause());
+                            return;
                         } else {
                             logger.error("Error creating pool to " + host, t);
                         }
@@ -407,7 +409,7 @@ class SessionManager extends AbstractSession {
 
             if (pool == null) {
                 if (dist != HostDistance.IGNORED && h.state == Host.State.UP)
-                    poolCreatedFutures.add(maybeAddPool(h, null));
+                    poolCreatedFutures.add(maybeAddPool(h, null, false));
             } else if (dist != pool.hostDistance) {
                 if (dist == HostDistance.IGNORED) {
                     toRemove.add(h);
@@ -441,7 +443,7 @@ class SessionManager extends AbstractSession {
             if (pool == null) {
                 if (dist != HostDistance.IGNORED && h.state == Host.State.UP)
                     try {
-                        maybeAddPool(h, null).get();
+                        maybeAddPool(h, null, false).get();
                     } catch (ExecutionException e) {
                         // Ignore, maybeAddPool has already handled the error
                     }
