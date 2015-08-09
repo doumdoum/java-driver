@@ -56,7 +56,11 @@ class ChainedResultSetFuture extends AbstractFuture<ResultSet> implements Result
 
     @Override
     public ResultSet getUninterruptibly() {
-        return null;
+        try {
+            return Uninterruptibles.getUninterruptibly(this);
+        } catch (ExecutionException e) {
+            throw DefaultResultSetFuture.extractCauseFromExecutionException(e);
+        }
     }
 
     @Override
