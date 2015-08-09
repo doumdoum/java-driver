@@ -28,6 +28,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.common.base.Predicates;
+import com.google.common.base.Throwables;
 import com.google.common.collect.*;
 import com.google.common.util.concurrent.*;
 import org.slf4j.Logger;
@@ -246,7 +247,7 @@ public class Cluster implements Closeable {
         try {
             return Uninterruptibles.getUninterruptibly(connectAsync());
         } catch (ExecutionException e) {
-            throw Exceptions.toUnchecked(e);
+            throw DriverThrowables.propagateCause(e);
         }
     }
 
@@ -279,7 +280,7 @@ public class Cluster implements Closeable {
         try {
             return Uninterruptibles.getUninterruptibly(connectAsync(keyspace));
         } catch (ExecutionException e) {
-            throw Exceptions.toUnchecked(e);
+            throw DriverThrowables.propagateCause(e);
         }
     }
 
@@ -541,7 +542,7 @@ public class Cluster implements Closeable {
         try {
             closeAsync().get();
         } catch (ExecutionException e) {
-            throw DefaultResultSetFuture.extractCauseFromExecutionException(e);
+            throw DriverThrowables.propagateCause(e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -2305,7 +2306,7 @@ public class Cluster implements Closeable {
                 for (SessionManager s : sessions)
                     Uninterruptibles.getUninterruptibly(s.updateCreatedPools());
             } catch (ExecutionException e) {
-                throw Exceptions.toUnchecked(e);
+                throw DriverThrowables.propagateCause(e);
             }
         }
 

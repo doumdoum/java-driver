@@ -59,7 +59,7 @@ class ChainedResultSetFuture extends AbstractFuture<ResultSet> implements Result
         try {
             return Uninterruptibles.getUninterruptibly(this);
         } catch (ExecutionException e) {
-            throw DefaultResultSetFuture.extractCauseFromExecutionException(e);
+            throw DriverThrowables.propagateCause(e);
         }
     }
 
@@ -68,7 +68,7 @@ class ChainedResultSetFuture extends AbstractFuture<ResultSet> implements Result
         try {
             return Uninterruptibles.getUninterruptibly(this, timeout, unit);
         } catch (ExecutionException e) {
-            throw DefaultResultSetFuture.extractCauseFromExecutionException(e);
+            throw DriverThrowables.propagateCause(e);
         }
     }
 }

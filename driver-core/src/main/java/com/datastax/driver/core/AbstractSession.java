@@ -76,7 +76,7 @@ public abstract class AbstractSession implements Session, AsyncInitSession {
         try {
             return Uninterruptibles.getUninterruptibly(prepareAsync(query));
         } catch (ExecutionException e) {
-            throw DefaultResultSetFuture.extractCauseFromExecutionException(e);
+            throw DriverThrowables.propagateCause(e);
         }
     }
 
@@ -88,7 +88,7 @@ public abstract class AbstractSession implements Session, AsyncInitSession {
         try {
             return Uninterruptibles.getUninterruptibly(prepareAsync(statement));
         } catch (ExecutionException e) {
-            throw DefaultResultSetFuture.extractCauseFromExecutionException(e);
+            throw DriverThrowables.propagateCause(e);
         }
     }
 
@@ -125,7 +125,7 @@ public abstract class AbstractSession implements Session, AsyncInitSession {
         try {
             closeAsync().get();
         } catch (ExecutionException e) {
-            throw DefaultResultSetFuture.extractCauseFromExecutionException(e);
+            throw DriverThrowables.propagateCause(e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }

@@ -22,6 +22,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.common.base.Function;
+import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.*;
@@ -63,7 +64,7 @@ class SessionManager extends AbstractSession {
         try {
             return Uninterruptibles.getUninterruptibly(initAsync());
         } catch (ExecutionException e) {
-            throw Exceptions.toUnchecked(e);
+            throw DriverThrowables.propagateCause(e);
         }
     }
 
@@ -482,7 +483,7 @@ class SessionManager extends AbstractSession {
         } catch (TimeoutException e) {
             throw new DriverInternalError(String.format("No responses after %d milliseconds while setting current keyspace. This should not happen, unless you have setup a very low connection timeout.", timeout));
         } catch (ExecutionException e) {
-            throw DefaultResultSetFuture.extractCauseFromExecutionException(e);
+            throw DriverThrowables.propagateCause(e);
         }
     }
 
