@@ -124,10 +124,10 @@ class HostConnectionPool implements Connection.Owner {
 
         Executor initExecutor = manager.cluster.manager.configuration.getPoolingOptions().getInitializationExecutor();
 
-        ListenableFuture<List<Void>> allConnectionsFuture = Futures.successfulAsList(connectionFutures);
+        ListenableFuture<List<Void>> allConnectionsFuture = Futures.allAsList(connectionFutures);
 
         final SettableFuture<Void> initFuture = SettableFuture.create();
-        Futures.addCallback(allConnectionsFuture, new MoreFutures.SuccessCallback<List<Void>>() {
+        Futures.addCallback(allConnectionsFuture, new FutureCallback<List<Void>>() {
             @Override
             public void onSuccess(List<Void> l) {
                 // Some of the connections might have failed, keep only the successful ones
@@ -151,6 +151,13 @@ class HostConnectionPool implements Connection.Owner {
                     initFuture.set(null);
                 }
             }
+
+            @Override
+            public void onFailure(Throwable t) {
+                phase.compareAndSet(Phase.INITIALIZING, Phase.INIT_FAILED);
+                forceClose(connections);
+                initFuture.setException(t);
+            }
         }, initExecutor);
         return initFuture;
     }
@@ -169,9 +176,14 @@ class HostConnectionPool implements Connection.Owner {
             @Override
             public ListenableFuture<Void> create(Throwable t) throws Exception {
                 connection.closeAsync();
-                Throwables.propagateIfInstanceOf(t, ConnectionException.class);
+                // Only propagate (and eventually fail the session) if the keyspace is invalid
                 Throwables.propagateIfInstanceOf(t, SetKeyspaceException.class);
-                throw Throwables.propagate(t);
+
+                // We don't want to swallow Errors either as they probably indicate a more serious issue (OOME...)
+                Throwables.propagateIfInstanceOf(t, Error.class);
+
+                // Otherwise, return success. The pool will simply ignore this connection when it sees that it's been closed.
+                return MoreFutures.VOID_SUCCESS;
             }
         });
     }
