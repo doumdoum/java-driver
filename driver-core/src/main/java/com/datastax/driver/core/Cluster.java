@@ -38,6 +38,7 @@ import com.datastax.driver.core.exceptions.AuthenticationException;
 import com.datastax.driver.core.exceptions.DriverInternalError;
 import com.datastax.driver.core.exceptions.NoHostAvailableException;
 import com.datastax.driver.core.policies.*;
+import com.datastax.driver.core.utils.MoreFutures;
 
 /**
  * Information and known state of a Cassandra cluster.
