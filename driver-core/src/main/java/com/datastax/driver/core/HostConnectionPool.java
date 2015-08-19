@@ -176,7 +176,10 @@ class HostConnectionPool implements Connection.Owner {
             @Override
             public ListenableFuture<Void> create(Throwable t) throws Exception {
                 connection.closeAsync();
-                // Only propagate (and eventually fail the session) if the keyspace is invalid
+                // Propagate these exceptions because they mean no connection will ever succeed. They will be handled
+                // accordingly in SessionManager#maybeAddPool.
+                Throwables.propagateIfInstanceOf(t, ClusterNameMismatchException.class);
+                Throwables.propagateIfInstanceOf(t, UnsupportedProtocolVersionException.class);
                 Throwables.propagateIfInstanceOf(t, SetKeyspaceException.class);
 
                 // We don't want to swallow Errors either as they probably indicate a more serious issue (OOME...)
