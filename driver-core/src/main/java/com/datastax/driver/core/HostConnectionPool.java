@@ -102,6 +102,8 @@ class HostConnectionPool implements Connection.Owner {
     public ListenableFuture<Void> initAsync(Connection reusedConnection) {
         String keyspace = manager.poolsState.keyspace;
 
+        Executor initExecutor = manager.cluster.manager.configuration.getPoolingOptions().getInitializationExecutor();
+
         // Create initial core connections
         final int coreSize = options().getCoreConnectionsPerHost(hostDistance);
         final List<Connection> connections = Lists.newArrayListWithCapacity(coreSize);
@@ -119,10 +121,8 @@ class HostConnectionPool implements Connection.Owner {
             }
             reusedConnection = null;
             connections.add(connection);
-            connectionFutures.add(handleErrors(setKeyspaceAsync(connectionFuture, connection, keyspace)));
+            connectionFutures.add(handleErrors(setKeyspaceAsync(connectionFuture, connection, keyspace), initExecutor));
         }
-
-        Executor initExecutor = manager.cluster.manager.configuration.getPoolingOptions().getInitializationExecutor();
 
         ListenableFuture<List<Void>> allConnectionsFuture = Futures.allAsList(connectionFutures);
 
@@ -162,7 +162,7 @@ class HostConnectionPool implements Connection.Owner {
         return initFuture;
     }
 
-    private ListenableFuture<Void> handleErrors(ListenableFuture<Void> connectionInitFuture) {
+    private ListenableFuture<Void> handleErrors(ListenableFuture<Void> connectionInitFuture, Executor executor) {
         return Futures.withFallback(connectionInitFuture, new FutureFallback<Void>() {
             @Override
             public ListenableFuture<Void> create(Throwable t) throws Exception {
@@ -178,7 +178,7 @@ class HostConnectionPool implements Connection.Owner {
                 // Otherwise, return success. The pool will simply ignore this connection when it sees that it's been closed.
                 return MoreFutures.VOID_SUCCESS;
             }
-        });
+        }, executor);
     }
 
     private ListenableFuture<Void> setKeyspaceAsync(ListenableFuture<Void> initFuture, final Connection connection, final String keyspace) {

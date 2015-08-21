@@ -487,7 +487,7 @@ class Connection {
                     throw new DriverInternalError("Unexpected response while setting keyspace: " + response);
                 }
             }
-        });
+        }, factory.manager.configuration.getPoolingOptions().getInitializationExecutor());
     }
 
     /**
