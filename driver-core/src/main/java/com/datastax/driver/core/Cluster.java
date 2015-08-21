@@ -296,7 +296,7 @@ public class Cluster implements Closeable {
      * @return a future that will complete when the session is fully initialized.
      *
      * @throws NoHostAvailableException if the Cluster has not been initialized
-     * yet ({@link #init} has not be called and this is the first connect call)
+     * yet ({@link #init} has not been called and this is the first connect call)
      * and no host amongst the contact points can be reached.
      *
      * @throws IllegalStateException if the Cluster was closed prior to calling
@@ -324,7 +324,7 @@ public class Cluster implements Closeable {
      * @return a future that will complete when the session is fully initialized.
      *
      * @throws NoHostAvailableException if the Cluster has not been initialized
-     * yet ({@link #init} has not be called and this is the first connect call)
+     * yet ({@link #init} has not been called and this is the first connect call)
      * and no host amongst the contact points can be reached.
      *
      * @throws IllegalStateException if the Cluster was closed prior to calling
