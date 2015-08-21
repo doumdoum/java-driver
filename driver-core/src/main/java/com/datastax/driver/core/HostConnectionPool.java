@@ -119,7 +119,7 @@ class HostConnectionPool implements Connection.Owner {
             }
             reusedConnection = null;
             connections.add(connection);
-            connectionFutures.add(setKeyspaceAsync(connectionFuture, connection, keyspace));
+            connectionFutures.add(handleErrors(setKeyspaceAsync(connectionFuture, connection, keyspace)));
         }
 
         Executor initExecutor = manager.cluster.manager.configuration.getPoolingOptions().getInitializationExecutor();
@@ -162,20 +162,10 @@ class HostConnectionPool implements Connection.Owner {
         return initFuture;
     }
 
-    private ListenableFuture<Void> setKeyspaceAsync(ListenableFuture<Void> initFuture, final Connection connection, final String keyspace) {
-        if (keyspace == null)
-            return initFuture;
-
-        ListenableFuture<Void> setKsFuture = Futures.transform(initFuture, new AsyncFunction<Void, Void>() {
-            @Override
-            public ListenableFuture<Void> apply(Void input) throws Exception {
-                return connection.setKeyspaceAsync(keyspace);
-            }
-        });
-        return Futures.withFallback(setKsFuture, new FutureFallback<Void>() {
+    private ListenableFuture<Void> handleErrors(ListenableFuture<Void> connectionInitFuture) {
+        return Futures.withFallback(connectionInitFuture, new FutureFallback<Void>() {
             @Override
             public ListenableFuture<Void> create(Throwable t) throws Exception {
-                connection.closeAsync();
                 // Propagate these exceptions because they mean no connection will ever succeed. They will be handled
                 // accordingly in SessionManager#maybeAddPool.
                 Throwables.propagateIfInstanceOf(t, ClusterNameMismatchException.class);
@@ -191,7 +181,18 @@ class HostConnectionPool implements Connection.Owner {
         });
     }
 
-    // Clean up if we got an error at construction time but still created part of the core connections
+    private ListenableFuture<Void> setKeyspaceAsync(ListenableFuture<Void> initFuture, final Connection connection, final String keyspace) {
+        return (keyspace == null)
+            ? initFuture
+            : Futures.transform(initFuture, new AsyncFunction<Void, Void>() {
+            @Override
+            public ListenableFuture<Void> apply(Void input) throws Exception {
+                return connection.setKeyspaceAsync(keyspace);
+            }
+        });
+    }
+
+    // Clean up if we got a fatal error at construction time but still created part of the core connections
     private void forceClose(List<Connection> connections) {
         for (Connection connection : connections) {
             connection.closeAsync().force();

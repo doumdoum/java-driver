@@ -35,7 +35,6 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.handler.timeout.IdleStateHandler;
-import io.netty.util.HashedWheelTimer;
 import io.netty.util.Timeout;
 import io.netty.util.Timer;
 import io.netty.util.TimerTask;
@@ -202,7 +201,7 @@ class Connection {
             @Override
             public void onSuccess(Void result) {
                 Host host = factory.manager.metadata.getHost(address);
-                if(host != null)
+                if (host != null)
                     host.convictionPolicy.signalConnectionCreated();
                 isInitialized = true;
             }
@@ -474,6 +473,7 @@ class Connection {
                     Connection.this.keyspace = keyspace;
                     return MoreFutures.VOID_SUCCESS;
                 } else if (response.type == ERROR) {
+                    closeAsync().force();
                     Responses.Error error = (Responses.Error)response;
                     Exception e = error.asException(address);
                     if (e instanceof InvalidQueryException) {
@@ -483,6 +483,7 @@ class Connection {
                     }
                     throw e;
                 } else {
+                    closeAsync().force();
                     throw new DriverInternalError("Unexpected response while setting keyspace: " + response);
                 }
             }
