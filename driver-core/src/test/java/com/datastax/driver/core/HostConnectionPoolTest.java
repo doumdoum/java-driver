@@ -32,7 +32,7 @@ import org.testng.annotations.Test;
 
 import static com.google.common.collect.Lists.newArrayList;
 import static org.mockito.Mockito.*;
-import static org.scassandra.http.client.ConnectionsClient.CloseType.CLOSE;
+import static org.scassandra.http.client.CurrentClient.CloseType.CLOSE;
 import static org.testng.Assert.fail;
 
 import com.datastax.driver.core.policies.ConstantReconnectionPolicy;
@@ -404,8 +404,8 @@ public class HostConnectionPoolTest extends ScassandraTestBase.PerClassCluster {
             Connection core1 = pool.connections.get(1);
 
             // Drop a connection and ensure the host stays up.
-            serverClient.disableListener();
-            connectionsClient.closeConnection(CLOSE, ((InetSocketAddress)core0.channel.localAddress()));
+            currentClient.disableListener();
+            currentClient.closeConnection(CLOSE, ((InetSocketAddress)core0.channel.localAddress()));
             Uninterruptibles.sleepUninterruptibly(100, TimeUnit.MILLISECONDS);
 
             // connection 0 should be down, while connection 1 and the Host should remain up.
@@ -451,8 +451,8 @@ public class HostConnectionPoolTest extends ScassandraTestBase.PerClassCluster {
             reset(factory);
 
             // Drop all connections.
-            serverClient.disableListener();
-            connectionsClient.closeConnections(CLOSE, host.getAddress());
+            currentClient.disableListener();
+            currentClient.closeConnections(CLOSE, host.getAddress());
             Uninterruptibles.sleepUninterruptibly(100, TimeUnit.MILLISECONDS);
 
             // Ensure all connections are closed.
@@ -475,7 +475,7 @@ public class HostConnectionPoolTest extends ScassandraTestBase.PerClassCluster {
             assertThat(cluster).hasClosedControlConnection();
 
             // Reenable connectivity.
-            serverClient.enableListener();
+            currentClient.enableListener();
 
             // Reconnect attempt should have been connected for control connection
             // and pool.
@@ -527,9 +527,9 @@ public class HostConnectionPoolTest extends ScassandraTestBase.PerClassCluster {
 
             // Drop two core connections.
             // Disable new connections initially and we'll eventually reenable it.
-            serverClient.disableListener();
-            connectionsClient.closeConnection(CLOSE, ((InetSocketAddress)core0.channel.localAddress()));
-            connectionsClient.closeConnection(CLOSE, ((InetSocketAddress)core2.channel.localAddress()));
+            currentClient.disableListener();
+            currentClient.closeConnection(CLOSE, ((InetSocketAddress)core0.channel.localAddress()));
+            currentClient.closeConnection(CLOSE, ((InetSocketAddress)core2.channel.localAddress()));
             Uninterruptibles.sleepUninterruptibly(100, TimeUnit.MILLISECONDS);
 
             // Since we have a connection left the host should remain up.
@@ -557,7 +557,7 @@ public class HostConnectionPoolTest extends ScassandraTestBase.PerClassCluster {
             Uninterruptibles.sleepUninterruptibly(readTimeout, TimeUnit.MILLISECONDS);
 
             // Enable listening so new connections succeed.
-            serverClient.enableListener();
+            currentClient.enableListener();
             // Sleep to elapse the Reconnection Policy.
             Uninterruptibles.sleepUninterruptibly(reconnectInterval, TimeUnit.MILLISECONDS);
 
@@ -623,9 +623,9 @@ public class HostConnectionPoolTest extends ScassandraTestBase.PerClassCluster {
             Connection extra1 = pool.connections.get(1);
 
             // Drop a connection and disable listening.
-            connectionsClient.closeConnection(CLOSE, ((InetSocketAddress)core0.channel.localAddress()));
+            currentClient.closeConnection(CLOSE, ((InetSocketAddress)core0.channel.localAddress()));
             Uninterruptibles.sleepUninterruptibly(100, TimeUnit.MILLISECONDS);
-            serverClient.disableListener();
+            currentClient.disableListener();
 
             // Since core0 was closed, all of it's requests should have errored.
             for(MockRequest request : core0requests) {
@@ -658,7 +658,7 @@ public class HostConnectionPoolTest extends ScassandraTestBase.PerClassCluster {
             assertThat(pool.connections).hasSize(1);
 
             // Re enable listening then wait for reconnect.
-            serverClient.enableListener();
+            currentClient.enableListener();
             Uninterruptibles.sleepUninterruptibly(reconnectInterval, TimeUnit.MILLISECONDS);
 
             // Borrow another connection, since we exceed max another connection should be opened.
@@ -703,7 +703,7 @@ public class HostConnectionPoolTest extends ScassandraTestBase.PerClassCluster {
             cluster.manager.connectionFactory = factory;
 
             // Allow the first 4 connections to establish, but disable after that.
-            serverClient.disableListener(4);
+            currentClient.disableListener(4);
             HostConnectionPool pool = createPool(cluster, 8, 8);
 
             reset(factory);
@@ -716,7 +716,7 @@ public class HostConnectionPoolTest extends ScassandraTestBase.PerClassCluster {
             assertThat(cluster).hasOpenControlConnection();
 
             // Reenable listener, wait reconnectInterval and then try borrowing a connection.
-            serverClient.enableListener();
+            currentClient.enableListener();
 
             Uninterruptibles.sleepUninterruptibly(reconnectInterval, TimeUnit.MILLISECONDS);
 
@@ -764,7 +764,7 @@ public class HostConnectionPoolTest extends ScassandraTestBase.PerClassCluster {
             cluster.manager.connectionFactory = factory;
 
             // Disable listener so all connections on pool fail.
-            serverClient.disableListener();
+            currentClient.disableListener();
             HostConnectionPool pool = createPool(cluster, 8, 8);
 
             reset(factory);
@@ -810,7 +810,7 @@ public class HostConnectionPoolTest extends ScassandraTestBase.PerClassCluster {
             cluster.manager.connectionFactory = factory;
 
             // Disable listener so all connections on pool fail.
-            serverClient.disableListener();
+            currentClient.disableListener();
             HostConnectionPool pool = createPool(cluster, 8, 8);
 
             // Pool should be empty.
@@ -820,7 +820,7 @@ public class HostConnectionPoolTest extends ScassandraTestBase.PerClassCluster {
             assertThat(cluster).host(1).hasState(Host.State.UP);
             assertThat(cluster).hasOpenControlConnection();
 
-            serverClient.enableListener();
+            currentClient.enableListener();
 
             // Wait for reconnectInterval so ConvictionPolicy allows connection to be created.
             Uninterruptibles.sleepUninterruptibly(reconnectInterval, TimeUnit.MILLISECONDS);

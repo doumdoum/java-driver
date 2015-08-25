@@ -21,9 +21,8 @@ import java.util.Collections;
 import org.scassandra.Scassandra;
 import org.scassandra.ScassandraFactory;
 import org.scassandra.http.client.ActivityClient;
-import org.scassandra.http.client.ConnectionsClient;
+import org.scassandra.http.client.CurrentClient;
 import org.scassandra.http.client.PrimingClient;
-import org.scassandra.http.client.ServerClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testng.annotations.AfterClass;
@@ -55,9 +54,7 @@ public abstract class ScassandraTestBase {
 
     protected ActivityClient activityClient;
 
-    protected ServerClient serverClient;
-
-    protected ConnectionsClient connectionsClient;
+    protected CurrentClient currentClient;
 
     @BeforeClass(groups = { "short", "long" })
     public void startScassandra() {
@@ -66,8 +63,7 @@ public abstract class ScassandraTestBase {
         scassandra.start();
         primingClient = scassandra.primingClient();
         activityClient = scassandra.activityClient();
-        serverClient = scassandra.serverClient();
-        connectionsClient = scassandra.connectionsClient();
+        currentClient = scassandra.currentClient();
         hostAddress = new InetSocketAddress(ip, scassandra.getBinaryPort());
     }
 
@@ -82,7 +78,7 @@ public abstract class ScassandraTestBase {
     public void resetClients() {
         activityClient.clearAllRecordedActivity();
         primingClient.clearAllPrimes();
-        serverClient.enableListener();
+        currentClient.enableListener();
     }
 
     protected Cluster.Builder createClusterBuilder() {
