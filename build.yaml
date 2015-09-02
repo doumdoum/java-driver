@@ -1,0 +1,12 @@
+java:
+  - oraclejdk7
+  - oraclejdk8
+os:
+  - ubuntu/trusty64
+env:
+  CASSANDRA_VERSION:
+    - 1.2.19
+build:
+  - script: |
+      java -version
+      echo $JAVA_HOME
